@@ -164,33 +164,80 @@ public class RegistrationForm extends JFrame {
             return;
         }
 
-        try {
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-            Date dob = sdf.parse(dobString);
+        // Create a table model for confirmation details
+        String[] columnNames = { "Field", "Value" };
+        Object[][] data = {
+                { "Name", name },
+                { "Mobile", mobile },
+                { "Gender", gender },
+                { "DOB", dobString },
+                { "Address", address }
+        };
 
-            Class.forName("com.mysql.cj.jdbc.Driver");
-            try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
-                    PreparedStatement pstmt = conn.prepareStatement(
-                            "INSERT INTO registrations (name, mobile, gender, dob, address) VALUES (?, ?, ?, ?, ?)")) {
+        DefaultTableModel tableModel = new DefaultTableModel(data, columnNames);
+        JTable detailsTable = new JTable(tableModel);
+        detailsTable.setPreferredScrollableViewportSize(new Dimension(300, 100));
+        detailsTable.setFillsViewportHeight(true);
 
-                pstmt.setString(1, name);
-                pstmt.setString(2, mobile);
-                pstmt.setString(3, gender);
-                pstmt.setDate(4, new java.sql.Date(dob.getTime()));
-                pstmt.setString(5, address);
+        JScrollPane tableScrollPane = new JScrollPane(detailsTable);
+        tableScrollPane.setBorder(BorderFactory.createEmptyBorder());
 
-                int rowsAffected = pstmt.executeUpdate();
-                if (rowsAffected > 0) {
-                    JOptionPane.showMessageDialog(this, "Registration successful!");
-                    resetForm();
-                    loadData(); // Reload data after successful registration
-                } else {
-                    JOptionPane.showMessageDialog(this, "Registration failed.");
+        // Create a panel to hold the confirmation message and table
+        JPanel panel = new JPanel();
+        panel.setLayout(new BorderLayout());
+        panel.add(new JLabel("<html><h3>Please confirm the details:</h3></html>"), BorderLayout.NORTH);
+        panel.add(tableScrollPane, BorderLayout.CENTER);
+
+        // Show confirmation dialog with options to Register or Exit
+        int response = JOptionPane.showConfirmDialog(this, panel, "Confirm Details", JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE);
+
+        if (response == JOptionPane.OK_OPTION) {
+            // Add the user to the database
+            try {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+                Date dob = sdf.parse(dobString);
+
+                Class.forName("com.mysql.cj.jdbc.Driver");
+                try (Connection conn = DriverManager.getConnection(DB_URL, USER, PASS);
+                        PreparedStatement pstmt = conn.prepareStatement(
+                                "INSERT INTO registrations (name, mobile, gender, dob, address) VALUES (?, ?, ?, ?, ?)",
+                                Statement.RETURN_GENERATED_KEYS)) {
+
+                    pstmt.setString(1, name);
+                    pstmt.setString(2, mobile);
+                    pstmt.setString(3, gender);
+                    pstmt.setDate(4, new java.sql.Date(dob.getTime()));
+                    pstmt.setString(5, address);
+
+                    int rowsAffected = pstmt.executeUpdate();
+                    if (rowsAffected > 0) {
+                        // Retrieve the new ID
+                        try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
+                            if (generatedKeys.next()) {
+                                int newId = generatedKeys.getInt(1);
+                                JOptionPane.showMessageDialog(this, "Registration successful! Your ID is " + newId);
+
+                                // Add the new record to the table
+                                tableModel.addRow(new Object[] { newId, name, mobile, gender, dob, address });
+
+                                // Reset the form and reload data
+                                resetForm();
+                                loadData();
+                            } else {
+                                JOptionPane.showMessageDialog(this, "Failed to retrieve the new ID.");
+                            }
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Registration failed.");
+                    }
                 }
+            } catch (ClassNotFoundException | SQLException | ParseException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
             }
-        } catch (ClassNotFoundException | SQLException | ParseException ex) {
-            ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Error: " + ex.getMessage());
+        } else {
+            JOptionPane.showMessageDialog(this, "Registration cancelled.");
         }
     }
 
